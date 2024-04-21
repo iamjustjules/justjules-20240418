@@ -1,0 +1,334 @@
+Homework
+Challenge: AWS Infrastructure Setup for Web Application Deployment
+Objective: Your challenge is to design and implement a resilient, secure, and scalable AWS infrastructure for a web application. While you may choose any AWS region for deployment, ensure that you use version 5.0 of the AWS provider in Terraform. Your infrastructure must also utilize the cidrsubnet function for subnetting within your VPC. Also, utilize a modular approach for your configuration, and upload your code to GitHub.
+Requirements:
+AWS Provider Setup:
+Configure Terraform to use AWS provider version ~> 5.0.
+Select an AWS region of your choice for the deployment, considering service availability and latency.
+
+VPC Configuration:
+Create a Virtual Private Cloud (VPC) to host all your resources. Utilize a CIDR block that supports a sufficient number of subnets and IP addresses for your application.
+Subnet Design:
+Divide your VPC's CIDR block into subnets using the cidrsubnet function. You must create at least three public and three private subnets across different Availability Zones for high availability.
+Internet and NAT Gateways:
+Establish an Internet Gateway to connect your VPC with the internet.
+Set up a NAT Gateway to allow instances in the private subnets to access the internet while maintaining their privacy.
+Routing:
+Configure appropriate route tables for public and private subnets. Ensure that instances in public subnets can directly access the internet, while instances in private subnets use the NAT Gateway.
+Security Groups:
+Define security groups for your application servers and load balancers. At a minimum, allow inbound HTTP and HTTPS traffic, alongside SSH and RDP for management.
+EC2 Instances and Scaling:
+Utilize a launch template for EC2 instances. Your template should specify instance types, the AMI ID, security groups, and any user data initialization scripts.
+Implement an Auto Scaling group that adjusts the number of instances based on demand, with specified minimum, maximum, and desired capacities.
+Load Balancer and Target Group:
+Deploy an Application Load Balancer (ALB) to distribute incoming traffic among your instances. Configure a target group for the ALB, specifying health check parameters to ensure traffic is only sent to healthy instances.
+Auto Scaling Policies:
+Create a scaling policy based on CPU utilization, aiming for an average target value. This policy should automatically scale the number of instances in your Auto Scaling group.
+Output:
+Your Terraform configuration should output the DNS name of the load balancer, allowing users to access your web application.
+
+
+
+Overall Summary:
+
+The Terraform setup described in the various `.tf` files is designed to create a highly available, resilient, and secure web application infrastructure on AWS. This setup includes provisioning a VPC, subnets across multiple availability zones, internet and NAT gateways for outbound internet access, routing configurations, security groups for EC2 instances and the application load balancer (ALB), an EC2 launch template with an auto-scaling configuration, and the ALB itself to distribute incoming traffic.
+
+ Module-by-Module Summary:
+
+00-providers.tf
+
+- Purpose: Specifies the required providers and their versions; in this case, AWS provider version 5.0 is used.
+- Key Components:
+  - Terraform block that specifies the AWS provider and its version.
+  - Provider block that configures AWS as the provider and sets the deployment region (us-east-1).
+
+01-vpc.tf
+
+- Purpose: Establishes the Virtual Private Cloud (VPC) where all resources will reside.
+- Key Components:
+  - Resource block for creating a VPC with DNS support and hostnames enabled to facilitate name resolution within the VPC.
+
+02-subnets.tf (Note: This appears to be a repeated block of `01-vpc.tf` instead of actual subnet definitions based on the description)
+
+- Purpose: Supposed to define subnet configurations but mistakenly duplicates VPC configuration.
+- Correction Needed: Should contain definitions for creating multiple public and private subnets across different availability zones using the `cidrsubnet` function for IP space management.
+
+03-gateways.tf
+
+- Purpose: Sets up internet connectivity for the VPC through an Internet Gateway and configures a NAT Gateway for private subnets.
+- Key Components:
+  - Internet Gateway attached to the VPC.
+  - EIP (Elastic IP) for the NAT Gateway ensuring a static public IP.
+  - NAT Gateway provisioned using the allocated EIP and placed in a specified public subnet.
+
+04-routing.tf
+
+- Purpose: Configures routing tables for both public and private subnets ensuring correct routing of traffic depending on the destination.
+- Key Components:
+  - Route table for public subnets with a default route to the Internet Gateway.
+  - Route table for private subnets with a default route to the NAT Gateway.
+  - Associations of these route tables with their respective subnets.
+
+05-security_groups.tf
+
+- Purpose: Defines security groups for the load balancer and EC2 instances to control inbound and outbound traffic according to the specified rules.
+- Key Components:
+  - Security group for ALB allowing HTTP and HTTPS traffic.
+  - Security group for EC2 instances allowing SSH and RDP connections, facilitating remote management.
+
+06-instance.tf
+
+- Purpose: Defines an EC2 launch template and an auto-scaling group configuration to manage the deployment and scaling of instances based on defined criteria.
+- Key Components:
+  - Launch template specifying the AMI, instance type, and security groups among other settings.
+  - Auto-scaling group using the launch template, specifying scaling requirements (minimum, maximum, desired capacities) and designated subnets for instance placement.
+
+07-load_balancer.tf
+
+- Purpose: Sets up an Application Load Balancer to distribute incoming traffic across multiple instances efficiently.
+- Key Components:
+  - Application Load Balancer configured with external visibility, utilizing the defined security group and subnets.
+  - Target group for the ALB defining health check parameters and traffic port.
+  - Listener for the ALB routing traffic to the target group.
+
+08-asg.tf
+
+- Purpose: Defines scaling policies for the auto-scaling group to automate the scaling process based on load (CPU utilization).
+- Key Components:
+  - Auto-scaling policy configured for simple scaling which adjusts the capacity based on predefined conditions.
+
+09-outputs.tf
+
+- Purpose: Outputs the DNS name of the Application Load Balancer, allowing users to access the application via a web browser.
+- Key Components:
+  - Output declaration for the ALB’s DNS name providing an endpoint for accessing the deployed web application.
+
+
+
+
+Line-by-Line Breakdown:
+
+00-providers.tf
+
+
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+
+1-7: Define the provider (AWS), its source (HashiCorp), and the version constraint (~> 5.0).
+9-12: Configure the AWS provider, setting the deployment region to "us-east-1".
+
+01-vpc.tf
+
+
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+ 
+
+ tags = {
+    Name = "MainVPC"
+  }
+}
+
+
+1-7: Create a VPC resource named "main" with a CIDR block "10.0.0.0/16", enabling DNS support and hostnames for easier resource lookup and management within the VPC.
+
+03-gateways.tf
+
+
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.main.id
+  tags = {
+    Name = "MainInternetGateway"
+  }
+}
+
+resource "aws_eip" "nat" {
+  domain = "vpc"
+}
+
+resource "aws_nat_gateway" "nat" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = element(aws_subnet.public.*.id, 0)
+  tags = {
+    Name = "MainNATGateway"
+  }
+}
+
+
+1-6: Attach an Internet Gateway to the VPC to allow internet access.
+8-10: Provision an Elastic IP (EIP) within the VPC domain for stable outbound internet connectivity.
+12-18: Set up a NAT Gateway using the allocated EIP, positioned in the first public subnet (assumes public subnets are defined correctly elsewhere).
+
+05-security_groups.tf
+
+
+resource "aws_security_group" "alb_sg" {
+  name        = "alb-sg"
+  description = "Security group for ALB allowing HTTP and HTTPS"
+  vpc_id      = aws_vpc.main.id
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  tags = {
+    Name = "ALBSecurityGroup"
+  }
+}
+
+
+1-22: Define a security group for the ALB to allow inbound HTTP (port 80) and HTTPS (port 443) traffic, and permit all outbound traffic. This ensures that the ALB can receive web traffic from anywhere and send responses to any destination.
+
+06-instance.tf
+
+
+resource "aws_launch_template" "app" {
+  name_prefix   = "app-instance-"
+  image_id      = "ami-051f8a213df8bc089"  # Correct AMI ID required
+  instance_type = "t2.micro"
+  vpc_security_group_ids = [aws_security_group.ec2_sg.id]
+  # user_data = base64encode(file("${path.module}/scripts/init-script.sh")) # Initialize instances
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "AppInstance"
+    }
+  }
+}
+
+
+1-14: Create an EC2 launch template for app instances, specifying the AMI ID, instance type, and associated security group. The `user_data` is commented out and should contain the path to an initialization script if needed.
+
+These configurations systematically build up the infrastructure needed to deploy a scalable and secure web application on AWS, leveraging Terraform for declarative infrastructure as code (IaC). The setup covers networking, security, instance management, and traffic distribution aspects necessary for a robust deployment.
+
+07-load_balancer.tf
+
+
+resource "aws_lb" "app" {
+  name               = "app-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb_sg.id]
+  subnets            = aws_subnet.public.*.id
+
+  tags = {
+    Name = "AppLoadBalancer"
+  }
+}
+
+resource "aws_lb_target_group" "app" {
+  name     = "app-target-group"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+
+  health_check {
+    enabled             = true
+    interval            = 30
+    path                = "/"
+    protocol            = "HTTP"
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 5
+    matcher             = "200"
+  }
+
+  tags = {
+    Name = "AppTargetGroup"
+  }
+}
+
+resource "aws_lb_listener" "front_end" {
+  load_balancer_arn = aws_lb.app.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app.arn
+  }
+}
+
+
+
+
+Detailed Breakdown:
+
+1-11: Defines an Application Load Balancer (ALB) named "app-lb" that is externally facing (`internal = false`), indicating it is reachable via the public internet. The ALB is associated with security groups that allow HTTP and HTTPS traffic and is placed within the public subnets of the VPC.
+
+14-29: Creates a target group for the ALB designed to handle HTTP traffic on port 80. It includes a health check configuration that checks the '/' path every 30 seconds and requires two consecutive successful checks for a healthy status, and two consecutive failures for an unhealthy status.
+
+32-41: Sets up a listener for the ALB that listens on port 80 and forwards traffic to the defined target group. This setup enables the ALB to distribute incoming HTTP traffic among the instances that are registered with the target group.
+
+ 08-asg.tf
+
+
+resource "aws_autoscaling_policy" "scale_out" {
+  name                   = "scale-out"
+  scaling_adjustment     = 1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 300
+  autoscaling_group_name = aws_autoscaling_group.app.name
+  policy_type            = "SimpleScaling"
+}
+
+
+Detailed Breakdown:
+
+1-8: Implements an auto-scaling policy for the EC2 instance auto-scaling group. This policy is named "scale-out" and adjusts the capacity of the group by one instance whenever triggered. The `cooldown` period is set to 300 seconds to prevent too frequent scaling actions. The policy type "SimpleScaling" indicates that the scaling adjustment is a straightforward increment or decrement of the current capacity.
+
+ 09-outputs.tf
+
+
+output "load_balancer_dns_name" {
+  value = aws_lb.app.dns_name
+  description = "DNS name for the application load balancer"
+}
+
+
+Detailed Breakdown:
+
+1-4: Defines an output variable that will display the DNS name of the Application Load Balancer once the Terraform configuration is applied. This DNS name is used to access the web application deployed within the auto-scaling group behind the ALB.
+
+ Overall Interaction of Modules
+
+- VPC Setup: Initiated in `01-vpc.tf`, where a VPC is created to house all subsequent resources.
+- Subnet Configuration: Although intended to be set up in `02-subnets.tf`, actual subnet configurations should appropriately split the VPC's CIDR block using the `cidrsubnet` function across multiple AZs for high availability.
+- Gateway Configuration: In `03-gateways.tf`, internet and NAT gateways are configured to provide internet access to instances in public and private subnets, respectively.
+- Routing Setup: `04-routing.tf` establishes how traffic is routed out of the VPC via public and private route tables associated with the corresponding subnets.
+- Security Groups: Defined in `05-security_groups.tf` to secure access to the ALB and EC2 instances, allowing only specified traffic.
+- Instance Management: `06-instance.tf` outlines the launch template and auto-scaling configurations for managing EC2 instance deployment based on demand.
+- Load Balancing: `07-load_balancer.tf` configures the ALB to distribute incoming traffic and defines health checks to ensure traffic is only routed to healthy instances.
+- Scaling Policies: `08-asg.tf` sets up scaling policies that automatically adjust the number of instances in response to load changes.
+- Outputs: `09-outputs.tf` provides necessary outputs
+
+ such as the DNS name of the load balancer for accessing the deployed application.
+
+This comprehensive setup ensures a robust, scalable, and fault-tolerant infrastructure suitable for hosting high-availability web applications on AWS, leveraging the full capabilities of Terraform for infrastructure as code.
+
